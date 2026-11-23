@@ -2,7 +2,7 @@
   "name": "@local/sessions-window",
   "version": "0.1.0",
   "private": true,
-  "description": "DSH 全部会话窗口：右侧浮动面板列出所有会话，按更新时间倒序，支持搜索、分页、归档标识与工作区过滤",
+  "description": "DSH 全部会话主面板：左侧导航入口 + 主对话区面板，列出所有会话，按更新时间倒序，支持搜索、分页、归档标识与工作区过滤",
   "type": "module",
   "exports": {
     ".": "./index.js",
@@ -18,7 +18,8 @@
         "@deepseek-ai/dsh-client-ui-conversation",
         "@deepseek-ai/dsh-client-ui-session",
         "@deepseek-ai/dsh-client-ui-workspace",
-        "@deepseek-ai/dsh-client-ui-sidebar-right"
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar"
       ]
     }
   }

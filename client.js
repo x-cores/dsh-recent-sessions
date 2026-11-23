@@ -1,18 +1,23 @@
 /**
  * @local/sessions-window —— browser 半。
  *
- * 一个「全部会话」右侧浮动窗口（与上下文洞察同款的 sidebar-right 页签）：
- *   - 列出所有会话（含归档），按 updatedAt 倒序
+ * 一个「全部会话」主面板（与上下文洞察 / 技能中心同款：左侧导航入口 + 主对话区面板）：
+ *   - 列出所有会话（含归档），按 updatedAt 倒序，行首带全局序号
  *   - 搜索（标题 / 会话 ID / cwd / 工作区名）
- *   - 分页（默认 20，下拉可改 10/20/50/100）
+ *   - 分页（默认 20，下拉可改 10/20/50/100；下拉与选项配色自动适配深 / 浅主题）
+ *   - 列表元信息不显示完整路径；相对时间与日期靠右显示
  *   - 归档会话带「已归档」标识，点击不跳转；普通会话点击直达
  *   - 工作区过滤列表：可把某些工作区下的全部会话整组隐藏（输入框
  *     placeholder 默认显示「记忆中枢」），存 localStorage
+ *   - 输入框 dock 上的「会话」按钮：选中本主面板
+ *
+ * 零外部资源：全部样式为内联 React 样式与内联 SVG，无任何 CDN css/js，
+ * 可在无互联网的企业内部署运行。
  *
  * 数据全部来自官方客户端快照，不经过 Host：
  *   ctx.get('sessions').list    → byId: { id → { sessionId, title, updatedAt, running, blank, retainedBy, address } }
  *   ctx.get('workspaces').list  → items[].{ title, sessionIds }, archivedSessionIds, pinnedSessionIds
- * 跳转走 ctx.get('uiWorkspace').openSession(id)。
+ * 跳转走 ctx.get('uiWorkspace').openSession(id)；面板选中走 ctx.layout.selectPanel(id)。
  */
 window.__ModuleLoader__.load({
   id: '@local/sessions-window',
@@ -21,8 +26,8 @@ window.__ModuleLoader__.load({
     const h = React.createElement;
     const { useState, useEffect, useMemo, useRef, useSyncExternalStore } = React;
 
-    /** 页签类型 kind（openTab 用）与实现 id（keyed 席位注册 key）。 */
-    const KIND = 'sessions-window';
+    /** 主面板 id：sidebar.panellist 的 id 与 root `main` keyed slot 的 key 用同一个值寻址。 */
+    const PANEL_ID = 'sessions-window';
     const TYPE_ID = '@local/sessions-window';
 
     const FILTER_KEY = 'dsh.sessions-window.filteredWorkspaces.v1';
@@ -57,8 +62,7 @@ window.__ModuleLoader__.load({
       if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`;
       if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`;
       if (diff < 30 * 86_400_000) return `${Math.floor(diff / 86_400_000)} 天前`;
-      const at = new Date(updatedAt);
-      return `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
+      return absoluteTime(updatedAt).slice(0, 10);
     }
 
     function absoluteTime(updatedAt) {
@@ -66,6 +70,13 @@ window.__ModuleLoader__.load({
       const at = new Date(updatedAt);
       const p = (n) => String(n).padStart(2, '0');
       return `${at.getFullYear()}-${p(at.getMonth() + 1)}-${p(at.getDate())} ${p(at.getHours())}:${p(at.getMinutes())}`;
+    }
+
+    /** 路径只显示最后一段（目录名），不显示完整路径。 */
+    function cwdBasename(cwd) {
+      if (!cwd) return '';
+      const parts = String(cwd).replace(/\\/g, '/').split('/').filter(Boolean);
+      return parts.length > 0 ? parts[parts.length - 1] : '';
     }
 
     function loadJson(key, fallback) {
@@ -85,17 +96,59 @@ window.__ModuleLoader__.load({
       } catch { /* 私隐模式等存不进去就算了 */ }
     }
 
+    /**
+     * 读取宿主实际渲染的底色，判断深 / 浅主题，并给原生控件（select 下拉）
+     * 提供一套不透明的背景 / 前景，避免「白底白字」。纯 DOM 读取，零依赖。
+     */
+    function detectUiTheme() {
+      const fallback = { dark: true, bg: '#202020', fg: '#e6e6e6' };
+      try {
+        const cs = getComputedStyle(document.body);
+        const m = String(cs.backgroundColor).match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+        if (!m) return fallback;
+        const alpha = m[4] === undefined ? 1 : Number(m[4]);
+        if (alpha < 0.5) return fallback; // 透明底拿不到有效色，按深色兜底
+        const r = +m[1], g = +m[2], b = +m[3];
+        const dark = (0.2126 * r + 0.7152 * g + 0.0722 * b) < 128;
+        return dark
+          ? { dark: true, bg: '#262626', fg: '#e8e8e8' }
+          : { dark: false, bg: '#ffffff', fg: '#1f2328' };
+      } catch {
+        return fallback;
+      }
+    }
+
     /* ───────────────────────── 样式 ───────────────────────── */
 
     const BORDER = '1px solid color-mix(in srgb, currentColor 18%, transparent)';
     const HOVER_BG = 'color-mix(in srgb, currentColor 8%, transparent)';
     const MUTED = 'color-mix(in srgb, currentColor 55%, transparent)';
+    const ACCENT_BLUE = 'color-mix(in srgb, #4c9aff 80%, currentColor 20%)';
+    const ACCENT_GREEN = 'color-mix(in srgb, #4cc38a 78%, currentColor 22%)';
+    const ACCENT_AMBER = 'color-mix(in srgb, #e0a458 78%, currentColor 22%)';
 
     const styles = {
       root: {
         display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0,
-        fontSize: '13px', lineHeight: 1.45, gap: 8,
+        fontSize: '13px', lineHeight: 1.45, gap: 8, padding: '6px 2px 0 2px',
       },
+      hero: {
+        position: 'relative', overflow: 'hidden',
+        display: 'flex', flexDirection: 'column', gap: 6,
+        padding: '14px 16px', borderRadius: 12,
+        border: '1px solid color-mix(in srgb, currentColor 14%, transparent)',
+        background:
+          'linear-gradient(135deg, color-mix(in srgb, #4c9aff 10%, transparent) 0%,'
+          + ' color-mix(in srgb, #9d7bff 7%, transparent) 45%, transparent 100%)',
+      },
+      heroTitleRow: { display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 15 },
+      heroStats: { display: 'flex', gap: 6, flexWrap: 'wrap' },
+      statPill: {
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        padding: '3px 10px', borderRadius: 999, fontSize: 12,
+        border: BORDER, background: 'color-mix(in srgb, currentColor 5%, transparent)',
+      },
+      statDot: { width: 6, height: 6, borderRadius: 999, display: 'inline-block' },
       toolbar: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' },
       search: {
         flex: 1, minWidth: 120, boxSizing: 'border-box',
@@ -105,29 +158,45 @@ window.__ModuleLoader__.load({
       button: {
         padding: '5px 10px', font: 'inherit', color: 'inherit', cursor: 'pointer',
         background: 'transparent', border: BORDER, borderRadius: 6,
+        transition: 'background .12s ease',
       },
       buttonActive: { background: HOVER_BG },
       select: {
-        padding: '5px 6px', font: 'inherit', color: 'inherit', cursor: 'pointer',
-        background: 'transparent', border: BORDER, borderRadius: 6, outline: 'none',
+        padding: '5px 6px', font: 'inherit', cursor: 'pointer', outline: 'none',
+        border: BORDER, borderRadius: 6,
       },
       list: { flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4, paddingRight: 2 },
       row: {
-        display: 'flex', flexDirection: 'column', gap: 2,
-        padding: '7px 9px', borderRadius: 6, border: '1px solid transparent',
+        display: 'flex', flexDirection: 'column', gap: 3,
+        padding: '8px 10px 8px 8px', borderRadius: 8, border: '1px solid transparent',
         cursor: 'pointer', textAlign: 'left',
+        transition: 'background .12s ease, border-color .12s ease, transform .12s ease',
       },
       rowArchived: { cursor: 'default', opacity: 0.62 },
       rowTitle: { display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500, minWidth: 0 },
+      indexChip: {
+        flexShrink: 0, minWidth: 26, textAlign: 'center', fontSize: 11, lineHeight: 1,
+        padding: '3px 4px', borderRadius: 6, fontVariantNumeric: 'tabular-nums',
+        border: '1px solid color-mix(in srgb, currentColor 14%, transparent)',
+        color: MUTED,
+      },
       rowTitleText: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 },
       badge: {
         flexShrink: 0, fontSize: 11, lineHeight: 1, padding: '3px 6px', borderRadius: 999,
-        border: BORDER, fontWeight: 400,
+        fontWeight: 400, border: BORDER,
       },
-      rowMeta: { color: MUTED, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+      rowMeta: {
+        display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: MUTED,
+      },
+      rowMetaLeft: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 },
+      rowMetaRight: {
+        flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6,
+        marginLeft: 'auto', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+      },
+      clockIcon: { flexShrink: 0, display: 'inline-flex', opacity: 0.75 },
       footer: { display: 'flex', alignItems: 'center', gap: 6, color: MUTED, flexWrap: 'wrap' },
       spacer: { flex: 1 },
-      empty: { color: MUTED, textAlign: 'center', padding: '28px 0' },
+      empty: { color: MUTED, textAlign: 'center', padding: '36px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 },
       filterPanel: {
         display: 'flex', flexDirection: 'column', gap: 6,
         padding: 10, border: BORDER, borderRadius: 8, marginBottom: 4,
@@ -147,6 +216,43 @@ window.__ModuleLoader__.load({
       const [hovered, setHovered] = useState(false);
       const bind = { onMouseEnter: () => setHovered(true), onMouseLeave: () => setHovered(false) };
       return [hovered, bind];
+    }
+
+    /* ───────────────────────── 装饰 SVG ───────────────────────── */
+
+    function ClockIcon({ size = 12 }) {
+      return h('svg', {
+        viewBox: '0 0 64 64', width: size, height: size, 'aria-hidden': true,
+        style: styles.clockIcon,
+      },
+        h('circle', { cx: 32, cy: 32, r: 26, fill: 'none', stroke: 'currentColor', strokeWidth: 6 }),
+        h('polyline', {
+          points: '32,16 32,34 44,42', fill: 'none', stroke: 'currentColor',
+          strokeWidth: 6, strokeLinecap: 'round', strokeLinejoin: 'round',
+        }));
+    }
+
+    function PanelHeroIcon({ size = 18 }) {
+      return h('svg', {
+        viewBox: '0 0 64 64', width: size, height: size, 'aria-hidden': true,
+        style: { color: ACCENT_BLUE, flexShrink: 0 },
+      },
+        h('rect', { x: 8, y: 6, width: 48, height: 52, rx: 8, fill: 'none', stroke: 'currentColor', strokeWidth: 5 }),
+        h('line', { x1: 8, y1: 20, x2: 56, y2: 20, stroke: 'currentColor', strokeWidth: 5 }),
+        h('circle', { cx: 20, cy: 32, r: 2.5, fill: 'currentColor' }),
+        h('circle', { cx: 20, cy: 42, r: 2.5, fill: 'currentColor' }),
+        h('line', { x1: 28, y1: 32, x2: 46, y2: 32, stroke: 'currentColor', strokeWidth: 5, strokeLinecap: 'round' }),
+        h('line', { x1: 28, y1: 42, x2: 38, y2: 42, stroke: 'currentColor', strokeWidth: 5, strokeLinecap: 'round' }));
+    }
+
+    function EmptyIcon({ size = 44 }) {
+      return h('svg', {
+        viewBox: '0 0 64 64', width: size, height: size, 'aria-hidden': true,
+        style: { opacity: 0.4 },
+      },
+        h('rect', { x: 10, y: 8, width: 44, height: 48, rx: 8, fill: 'none', stroke: 'currentColor', strokeWidth: 4, strokeDasharray: '6 5' }),
+        h('circle', { cx: 32, cy: 30, r: 8, fill: 'none', stroke: 'currentColor', strokeWidth: 4 }),
+        h('line', { x1: 32, y1: 44, x2: 32, y2: 50, stroke: 'currentColor', strokeWidth: 4, strokeLinecap: 'round' }));
     }
 
     /* ───────────────────────── 过滤面板 ───────────────────────── */
@@ -183,11 +289,11 @@ window.__ModuleLoader__.load({
         h('div', { style: styles.hintText }, '回车或点上方建议添加；× 移除。'));
     }
 
-    /* ───────────────────────── 主窗口 ───────────────────────── */
+    /* ───────────────────────── 主面板 ───────────────────────── */
 
     /**
-     * props 由 sidebar.right.pane.tab 席位注入（hooks.tabInfo 等），
-     * 数据与动作经闭包里的 ctx 拿 —— 工厂里 apply 时才建组件，ctx 已就绪。
+     * props 由 root `main` keyed slot 注入；数据与动作经闭包里的 ctx 拿 ——
+     * 工厂里 apply 时才建组件，ctx 已就绪。
      */
     function makeBody(ctx) {
       const sessionsApi = ctx.get?.('sessions', false);
@@ -212,11 +318,17 @@ window.__ModuleLoader__.load({
         const [filtered, setFiltered] = useState(() => loadJson(FILTER_KEY, []));
         const [filterOpen, setFilterOpen] = useState(false);
         const [now, setNow] = useState(() => Date.now());
+        const [ui, setUi] = useState(detectUiTheme);
         const searchRef = useRef(null);
 
-        // 相对时间每 30s 刷新一次
+        // 相对时间每 30s 刷新一次；主题探测低频轮询（主题切换后最多 5s 生效）
         useEffect(() => {
           const timer = setInterval(() => setNow(Date.now()), 30_000);
+          return () => clearInterval(timer);
+        }, []);
+        useEffect(() => {
+          setUi(detectUiTheme());
+          const timer = setInterval(() => setUi(detectUiTheme()), 5_000);
           return () => clearInterval(timer);
         }, []);
 
@@ -227,7 +339,6 @@ window.__ModuleLoader__.load({
         const rowsStore = useMemo(() => {
           let cache = [];
           let known = [];
-          const listeners = new Set();
           const recompute = () => {
             const byId = sessionsApi?.list?.getSnapshot()?.byId ?? {};
             const ws = workspacesApi?.list?.getSnapshot();
@@ -267,8 +378,7 @@ window.__ModuleLoader__.load({
                 sessionsApi?.list?.subscribe?.(notify),
                 workspacesApi?.list?.subscribe?.(notify),
               ].filter(Boolean);
-              listeners.add(listener);
-              return () => { for (const off of offs) off(); listeners.delete(listener); };
+              return () => { for (const off of offs) off(); };
             },
             getSnapshot() { return cache; },
             getKnownWorkspaces() { return known; },
@@ -299,8 +409,37 @@ window.__ModuleLoader__.load({
         useEffect(() => { setPage(1); }, [query, filtered.join('\u0000'), pageSize]);
 
         const archivedVisible = pageRows.filter((r) => r.archived).length;
+        const runningVisible = visibleRows.filter((r) => r.running).length;
+
+        // select 用不透明主题色 + colorScheme，原生下拉与选项不再白底白字
+        const selectStyle = {
+          ...styles.select,
+          color: ui.fg, backgroundColor: ui.bg,
+          colorScheme: ui.dark ? 'dark' : 'light',
+        };
+        const optionStyle = { color: ui.fg, backgroundColor: ui.bg };
 
         return h('div', { style: styles.root },
+          // ── 装饰性页头 ──
+          h('div', { style: styles.hero },
+            h('div', { style: styles.heroTitleRow },
+              h(PanelHeroIcon),
+              '全部会话',
+              h('div', { style: styles.spacer }),
+              h('span', { style: styles.hintText }, '按更新时间倒序')),
+            h('div', { style: styles.heroStats },
+              h('span', { style: styles.statPill },
+                h('span', { style: { ...styles.statDot, background: ACCENT_BLUE } }),
+                `共 ${allRows.length} 个`),
+              runningVisible > 0 && h('span', { style: styles.statPill },
+                h('span', { style: { ...styles.statDot, background: ACCENT_GREEN } }),
+                `运行中 ${runningVisible}`),
+              visibleRows.length !== allRows.length && h('span', { style: styles.statPill },
+                h('span', { style: { ...styles.statDot, background: ACCENT_AMBER } }),
+                `当前条件 ${visibleRows.length} 个`),
+              archivedVisible > 0 && h('span', { style: styles.statPill },
+                h('span', { style: { ...styles.statDot, background: MUTED } }),
+                `本页归档 ${archivedVisible} 个`))),
           h('div', { style: styles.toolbar },
             h('input', {
               ref: searchRef, style: styles.search, value: query,
@@ -317,19 +456,21 @@ window.__ModuleLoader__.load({
             filtered, setFiltered,
             knownWorkspaces,
           }),
-          h('div', { style: styles.hintText },
-            `共 ${allRows.length} 个会话` + (visibleRows.length !== allRows.length ? `，当前条件 ${visibleRows.length} 个` : '')
-            + (archivedVisible > 0 ? `，其中已归档 ${archivedVisible} 个` : '')),
           h('div', { style: styles.list },
             pageRows.length === 0
-              ? h('div', { style: styles.empty }, '没有符合条件的会话')
-              : pageRows.map((row) => h(SessionRow, { key: row.id, row, now, openSession }))),
+              ? h('div', { style: styles.empty },
+                h(EmptyIcon),
+                '没有符合条件的会话')
+              : pageRows.map((row, idx) => h(SessionRow, {
+                key: row.id, row, now, openSession,
+                index: (safePage - 1) * pageSize + idx + 1,
+              }))),
           h('div', { style: styles.footer },
             h('span', null, '每页'),
             h('select', {
-              style: styles.select, value: pageSize,
+              style: selectStyle, value: pageSize,
               onChange: (e) => setPageSize(Number(e.target.value)),
-            }, PAGE_SIZE_OPTIONS.map((n) => h('option', { key: n, value: n }, String(n)))),
+            }, PAGE_SIZE_OPTIONS.map((n) => h('option', { key: n, value: n, style: optionStyle }, String(n)))),
             h('span', null, `条 · 第 ${safePage} / ${totalPages} 页`),
             h('div', { style: styles.spacer }),
             h('button', { style: styles.button, disabled: safePage <= 1, onClick: () => setPage(1) }, '«'),
@@ -341,14 +482,21 @@ window.__ModuleLoader__.load({
       };
     }
 
-    function SessionRow({ row, now, openSession }) {
+    function SessionRow({ row, now, openSession, index }) {
       const [hovered, bind] = useHover();
       const isArchived = row.archived;
       const style = {
         ...styles.row,
         ...(isArchived ? styles.rowArchived : {}),
-        ...(hovered && !isArchived ? { background: HOVER_BG, border: BORDER } : {}),
+        ...(hovered && !isArchived
+          ? {
+            background: HOVER_BG, borderColor: 'color-mix(in srgb, currentColor 18%, transparent)',
+            transform: 'translateX(2px)',
+          }
+          : {}),
+        ...(row.current ? { borderColor: 'color-mix(in srgb, currentColor 24%, transparent)' } : {}),
       };
+      const dir = cwdBasename(row.cwd);
       return h('div', {
         ...bind,
         style,
@@ -363,20 +511,22 @@ window.__ModuleLoader__.load({
         },
       },
         h('div', { style: styles.rowTitle },
+          h('span', { style: styles.indexChip }, String(index).padStart(2, '0')),
           h('span', { style: styles.rowTitleText }, row.title),
           isArchived && h('span', { key: 'arch', style: styles.badge }, '已归档'),
-          row.current && h('span', { key: 'cur', style: styles.badge }, '当前'),
+          row.current && h('span', { key: 'cur', style: { ...styles.badge, color: ACCENT_BLUE, borderColor: ACCENT_BLUE } }, '当前'),
           row.pinned && h('span', { key: 'pin', style: styles.badge }, '置顶'),
-          row.running && h('span', { key: 'run', style: styles.badge }, '运行中'),
+          row.running && h('span', { key: 'run', style: { ...styles.badge, color: ACCENT_GREEN, borderColor: ACCENT_GREEN } }, '运行中'),
         ),
-        h('div', { style: styles.rowMeta, title: `${row.cwd}${row.cwd ? '\n' : ''}${row.id}` },
-          [
-            row.workspace,
+        h('div', { style: styles.rowMeta },
+          h('span', {
+            style: styles.rowMetaLeft,
+            title: `${row.cwd}${row.cwd ? '\n' : ''}${row.id}`,
+          }, [row.workspace, dir].filter(Boolean).join(' · ')),
+          h('span', { style: styles.rowMetaRight, title: absoluteTime(row.updatedAt) },
             relativeTime(row.updatedAt, now),
-            absoluteTime(row.updatedAt),
-            row.cwd,
-          ].filter(Boolean).join(' · ')),
-      );
+            h('span', { style: { opacity: 0.5 } }, '·'),
+            absoluteTime(row.updatedAt))));
     }
 
     /* ───────────────────────── 入口按钮（输入框 dock） ───────────────────────── */
@@ -385,21 +535,17 @@ window.__ModuleLoader__.load({
       return function OpenSessionsWindowButton() {
         const [hovered, bind] = useHover();
         const onClick = () => {
-          const sidebarRight = ctx.get?.('sidebarRight', false);
           try {
-            if (sidebarRight?.openTab) {
-              sidebarRight.openTab(KIND, { destination: 'float' });
-              return;
-            }
+            ctx.layout?.selectPanel?.(PANEL_ID);
           } catch (error) {
-            ctx.logger?.warn?.('[sessions-window] openTab 失败：', error);
+            ctx.logger?.warn?.('[sessions-window] selectPanel 失败：', error);
           }
         };
         return h('button', {
           ...bind,
           onClick,
           title: '全部会话：按更新时间浏览所有会话',
-          'aria-label': '打开全部会话窗口',
+          'aria-label': '打开全部会话面板',
           style: {
             display: 'inline-flex', alignItems: 'center', gap: 5,
             padding: '4px 8px', font: 'inherit', fontSize: 12, color: 'inherit', cursor: 'pointer',
@@ -419,37 +565,43 @@ window.__ModuleLoader__.load({
       };
     }
 
+    /* ───────────────────────── 左侧导航图标（sidebar.panellist） ───────────────────────── */
+
+    function SessionsPanelIcon({ size }) {
+      const s = size ?? 16;
+      return h('svg', { viewBox: '0 0 64 64', width: s, height: s, 'aria-hidden': true },
+        h('rect', { x: 8, y: 6, width: 48, height: 52, rx: 8, fill: 'none', stroke: 'currentColor', strokeWidth: 5 }),
+        h('line', { x1: 8, y1: 20, x2: 56, y2: 20, stroke: 'currentColor', strokeWidth: 5 }),
+        h('circle', { cx: 20, cy: 32, r: 2.5, fill: 'currentColor' }),
+        h('circle', { cx: 20, cy: 42, r: 2.5, fill: 'currentColor' }),
+        h('line', { x1: 28, y1: 32, x2: 46, y2: 32, stroke: 'currentColor', strokeWidth: 5, strokeLinecap: 'round' }),
+        h('line', { x1: 28, y1: 42, x2: 38, y2: 42, stroke: 'currentColor', strokeWidth: 5, strokeLinecap: 'round' }));
+    }
+
     /* ───────────────────────── 插件注册 ───────────────────────── */
 
     return {
-      inject: ['slots', 'sessions', 'workspaces', 'uiWorkspace', 'sidebarRight', 'sidebarRightTabs'],
+      inject: ['slots', 'sessions', 'workspaces', 'uiWorkspace', 'layout'],
       apply(ctx) {
-        // ① 页签类型：kind 供 openTab；guide 让它出现在右侧栏引导页上
-        const tabs = ctx.get?.('sidebarRightTabs', false);
-        if (typeof tabs?.register === 'function') {
-          ctx.effect(() => tabs.register({
-            id: TYPE_ID,
-            kind: KIND,
-            title: () => '全部会话',
-            guide: [{
-              id: 'main',
-              order: 20,
-              title: () => '全部会话',
-              description: () => '按更新时间浏览所有会话；支持搜索、分页、归档标识与工作区过滤',
-            }],
-          }), 'sessions-window: tab type');
-        } else {
-          ctx.logger?.warn?.('[sessions-window] sidebarRightTabs 不可用，仅注册 dock 按钮');
-        }
-
-        // ② 页签正文（keyed：注册 key = 类型实现 id）
+        // ① 主面板正文（root `main` keyed slot，key 与 panellist 的 id 同值）
         const Body = makeBody(ctx);
-        ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register(
-          { name: 'sidebar.right.pane.tab', key: TYPE_ID },
+        ctx.effect(() => ctx.slots.inject('main', () => ctx.slots.register(
+          { name: 'main', key: PANEL_ID },
           Body,
-        )), 'sessions-window: tab body');
+        )), 'sessions-window: main panel');
 
-        // ③ 输入框 dock 上的打开按钮
+        // ② 左侧导航入口（与「上下文洞察」「技能中心」同款 sidebar.panellist 行）
+        ctx.effect(() => ctx.slots.inject('sidebar.panellist', () => ctx.slots.register(
+          {
+            name: 'sidebar.panellist',
+            id: PANEL_ID,
+            order: 30,
+            label: () => '全部会话',
+          },
+          SessionsPanelIcon,
+        )), 'sessions-window: sidebar entry');
+
+        // ③ 输入框 dock 上的「会话」按钮：选中本主面板
         const DockButton = makeDockButton(ctx);
         ctx.effect(() => ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register(
           { name: 'conversation.composer.dock', id: 'sessions-window-open', order: 8 },
