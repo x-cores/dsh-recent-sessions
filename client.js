@@ -315,7 +315,13 @@ window.__ModuleLoader__.load({
           const saved = loadJson(PAGE_SIZE_KEY, DEFAULT_PAGE_SIZE);
           return PAGE_SIZE_OPTIONS.includes(saved) ? saved : DEFAULT_PAGE_SIZE;
         });
-        const [filtered, setFiltered] = useState(() => loadJson(FILTER_KEY, []));
+        const [filtered, setFiltered] = useState(() => {
+          const saved = loadJson(FILTER_KEY, [])
+          // 兜底：存的数据损坏（非字符串数组）时回退为空列表
+          return Array.isArray(saved) && saved.every((x) => typeof x === 'string')
+            ? saved.filter((x) => x.trim().length > 0)
+            : []
+        });
         const [filterOpen, setFilterOpen] = useState(false);
         const [now, setNow] = useState(() => Date.now());
         const [ui, setUi] = useState(detectUiTheme);
