@@ -32,9 +32,8 @@ jobs:
           cp -r index.js client.js cordis.patch.yml docs icon.svg LICENSE README.md package.json "dist/${NAME}/"
           (cd dist && zip -r "../${NAME}.zip" "${NAME}")
           (cd dist && tar -czf "../${NAME}.tar.gz" "${NAME}")
-          sha256sum "${NAME}.zip" "${NAME}.tar.gz" "${TGZ}" > "checksums.txt"
-          cat dsh-recent-sessions-0.1.0.tgz
-            checksums.txt
+          sha256sum "${NAME}.zip" "${NAME}.tar.gz" ${TGZ} > checksums.txt
+          cat checksums.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
