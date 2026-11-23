@@ -1,0 +1,7 @@
+# @local/sessions-window bundle patch
+#
+# 右侧「全部会话」窗口：注册一个 sidebar-right 浮动页签类型，
+# 并在输入框 dock 上加一个打开按钮。
+- insert:
+    - id: sessions-window
+      name: '@local/sessions-window'
