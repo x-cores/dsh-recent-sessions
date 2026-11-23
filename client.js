@@ -25,6 +25,10 @@ window.__ModuleLoader__.load({
     const React = require('react');
     const h = React.createElement;
     const { useState, useEffect, useMemo, useRef, useSyncExternalStore } = React;
+    // useDeferredValue 在较新 React 上可用；旧版回退为直通（行为退化为同步过滤，不报错）
+    const useDeferredValueIfAvailable = typeof React.useDeferredValue === 'function'
+      ? React.useDeferredValue
+      : (v) => v;
 
     /** 主面板 id：sidebar.panellist 的 id 与 root `main` keyed slot 的 key 用同一个值寻址。 */
     const PANEL_ID = 'sessions-window';
@@ -327,14 +331,22 @@ window.__ModuleLoader__.load({
         const [ui, setUi] = useState(detectUiTheme);
         const searchRef = useRef(null);
 
-        // 相对时间每 30s 刷新一次；主题探测低频轮询（主题切换后最多 5s 生效）
+        // 相对时间每 30s 刷新一次（低频、可接受的全列表轻量重渲染）
         useEffect(() => {
           const timer = setInterval(() => setNow(Date.now()), 30_000);
           return () => clearInterval(timer);
         }, []);
+        // 主题探测：MutationObserver 监听主题相关属性变化，即时生效、零轮询；
+        // 观察器不可用时退化为 15s 低频轮询兜底
         useEffect(() => {
           setUi(detectUiTheme());
-          const timer = setInterval(() => setUi(detectUiTheme()), 5_000);
+          const TARGETS = [document.documentElement, document.body];
+          if (typeof MutationObserver === 'function') {
+            const mo = new MutationObserver(() => setUi(detectUiTheme()));
+            for (const t of TARGETS) mo.observe(t, { attributes: true, attributeFilter: ['class', 'style', 'data-theme', 'aria-hidden'] });
+            return () => mo.disconnect();
+          }
+          const timer = setInterval(() => setUi(detectUiTheme()), 15_000);
           return () => clearInterval(timer);
         }, []);
 
@@ -395,8 +407,12 @@ window.__ModuleLoader__.load({
         const allRows = useSyncExternalStore(rowsStore.subscribe, rowsStore.getSnapshot);
         const knownWorkspaces = rowsStore.getKnownWorkspaces();
 
+        // ── 搜索：deferred 值让输入框在大会话量下仍保持即时响应 ──
+        const deferredQuery = useDeferredValueIfAvailable(query);
+
         // ── 过滤 + 搜索 ──
-        const queryLower = query.trim().toLowerCase();
+        const queryLower = deferredQuery.trim().toLowerCase();
+        const queryStale = deferredQuery !== query;
         const visibleRows = useMemo(() => {
           const filterSet = new Set(filtered);
           return allRows.filter((row) => {
@@ -412,7 +428,9 @@ window.__ModuleLoader__.load({
         const totalPages = Math.max(1, Math.ceil(visibleRows.length / pageSize));
         const safePage = Math.min(page, totalPages);
         const pageRows = visibleRows.slice((safePage - 1) * pageSize, safePage * pageSize);
-        useEffect(() => { setPage(1); }, [query, filtered.join('\u0000'), pageSize]);
+        // 条件变化时回到第 1 页；已在第 1 页则跳过，避免多余的一次重渲染
+        const filterKey = query + '\u0000' + filtered.join('\u0000') + '\u0000' + String(pageSize);
+        useEffect(() => { setPage((p) => (p === 1 ? p : 1)); }, [filterKey]);
 
         const archivedVisible = pageRows.filter((r) => r.archived).length;
         const runningVisible = visibleRows.filter((r) => r.running).length;
@@ -450,8 +468,10 @@ window.__ModuleLoader__.load({
           h('div', { style: styles.toolbar },
             h('input', {
               ref: searchRef, style: styles.search, value: query,
+              type: 'search', 'aria-label': '搜索会话',
               placeholder: '搜索会话标题 / ID / 路径 / 工作区',
               onChange: (e) => setQuery(e.target.value),
+              onKeyDown: (e) => { if (e.key === 'Escape' && query) { e.preventDefault(); setQuery(''); } },
             }),
             h('button', {
               style: { ...styles.button, ...(filterOpen || filtered.length > 0 ? styles.buttonActive : {}) },
@@ -477,7 +497,7 @@ window.__ModuleLoader__.load({
             filtered, setFiltered,
             knownWorkspaces,
           }),
-          h('div', { style: styles.list },
+          h('div', { style: { ...styles.list, opacity: queryStale ? 0.55 : 1, transition: 'opacity .12s ease' }, role: 'list', 'aria-label': '会话列表' },
             pageRows.length === 0
               ? h('div', { style: styles.empty },
                 h(EmptyIcon),
@@ -515,6 +535,7 @@ window.__ModuleLoader__.load({
 
     function SessionRow({ row, now, openSession, index }) {
       const isArchived = row.archived;
+      const at = absoluteTime(row.updatedAt); // 一次计算，两处复用
       // 普通元素（非原生 button）：无 UA 默认白底/焦点样式，可点击性用 role+tabIndex+键盘事件补齐
       return h('div', {
         className: `sw-row${isArchived ? ' archived' : ''}`,
@@ -524,7 +545,7 @@ window.__ModuleLoader__.load({
         tabIndex: isArchived ? -1 : 0,
         title: isArchived
           ? '已归档会话'
-          : `${row.title}\n${row.cwd || row.id}\n${absoluteTime(row.updatedAt)}`,
+          : `${row.title}\n${row.cwd || row.id}\n${at}`,
         onClick: () => { if (!isArchived) openSession(row.id); },
         onKeyDown: (e) => {
           if (!isArchived && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openSession(row.id); }
@@ -544,10 +565,10 @@ window.__ModuleLoader__.load({
               style: styles.rowMetaLeft,
               title: `${row.cwd}${row.cwd ? '\n' : ''}${row.id}`,
             }, [row.workspace, cwdBasename(row.cwd)].filter(Boolean).join(' · ')),
-            h('span', { style: styles.rowMetaRight, title: absoluteTime(row.updatedAt) },
+            h('span', { style: styles.rowMetaRight, title: at },
               relativeTime(row.updatedAt, now),
               h('span', { style: { opacity: 0.5 } }, '·'),
-              absoluteTime(row.updatedAt)))));
+              at))));
     }
 
     /* ───────────────────────── 入口按钮（conversation.input.right，模型选择框旁） ───────────────────────── */

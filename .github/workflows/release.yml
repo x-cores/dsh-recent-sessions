@@ -1,0 +1,43 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Syntax check
+        run: node --check index.js && node --check client.js
+
+      - name: Pack release artifact
+        run: |
+          NAME="${GITHUB_REPOSITORY#*/}-${GITHUB_REF_NAME}"
+          mkdir -p "dist/${NAME}"
+          cp -r index.js client.js cordis.patch.yml docs icon.svg LICENSE README.md package.json "dist/${NAME}/"
+          (cd dist && zip -r "../${NAME}.zip" "${NAME}")
+          (cd dist && tar -czf "../${NAME}.tar.gz" "${NAME}")
+          sha256sum "${NAME}.zip" "${NAME}.tar.gz" > "checksums.txt"
+          cat checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            *.zip
+            *.tar.gz
+            checksums.txt
