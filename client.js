@@ -76,13 +76,6 @@ window.__ModuleLoader__.load({
       return `${at.getFullYear()}-${p(at.getMonth() + 1)}-${p(at.getDate())} ${p(at.getHours())}:${p(at.getMinutes())}`;
     }
 
-    /** 路径只显示最后一段（目录名），不显示完整路径。 */
-    function cwdBasename(cwd) {
-      if (!cwd) return '';
-      const parts = String(cwd).replace(/\\/g, '/').split('/').filter(Boolean);
-      return parts.length > 0 ? parts[parts.length - 1] : '';
-    }
-
     function loadJson(key, fallback) {
       try {
         const raw = localStorage.getItem(key);
@@ -384,6 +377,15 @@ window.__ModuleLoader__.load({
               });
             }
             for (const row of rows) if (row.id === currentId) row.current = true;
+            // sessionIds 未登记的会话按 cwd 归位：同 cwd 的已登记会话所在工作区即为其工作区，
+            // 显示与过滤均使用工作区名（不再用目录名兜底）。
+            const wsByCwd = new Map();
+            for (const row of rows) {
+              if (row.workspace && row.cwd && !wsByCwd.has(row.cwd)) wsByCwd.set(row.cwd, row.workspace);
+            }
+            for (const row of rows) {
+              if (!row.workspace && row.cwd && wsByCwd.has(row.cwd)) row.workspace = wsByCwd.get(row.cwd);
+            }
             rows.sort((a, b) => b.updatedAt - a.updatedAt);
             cache = rows;
             known = [...new Set([...names.values()])].sort((a, b) => a.localeCompare(b));
@@ -416,9 +418,7 @@ window.__ModuleLoader__.load({
         const visibleRows = useMemo(() => {
           const filterSet = new Set(filtered);
           return allRows.filter((row) => {
-            // workspace 可能为空（sessionIds 未登记该会话，行上显示的是 cwd 目录名兜底），
-            // 过滤时同时匹配两者，保证按可见名字能过滤掉。
-            if (filterSet.has(row.workspace) || filterSet.has(cwdBasename(row.cwd))) return false;
+            if (filterSet.has(row.workspace)) return false;
             if (queryLower.length === 0) return true;
             return row.title.toLowerCase().includes(queryLower)
               || row.id.toLowerCase().includes(queryLower)
