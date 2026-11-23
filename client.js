@@ -1,5 +1,5 @@
 /**
- * @local/sessions-window —— browser 半。
+ * dsh-recent-sessions —— browser 半。
  *
  * 一个「全部会话」主面板（与上下文洞察 / 技能中心同款：左侧导航入口 + 主对话区面板）：
  *   - 列出所有会话（含归档），按 updatedAt 倒序，行首带全局序号
@@ -20,7 +20,7 @@
  * 跳转走 ctx.get('uiWorkspace').openSession(id)；面板选中走 ctx.layout.selectPanel(id)。
  */
 window.__ModuleLoader__.load({
-  id: '@local/sessions-window',
+  id: 'dsh-recent-sessions',
   factory(require) {
     const React = require('react');
     const h = React.createElement;
@@ -32,7 +32,7 @@ window.__ModuleLoader__.load({
 
     /** 主面板 id：sidebar.panellist 的 id 与 root `main` keyed slot 的 key 用同一个值寻址。 */
     const PANEL_ID = 'sessions-window';
-    const TYPE_ID = '@local/sessions-window';
+    const TYPE_ID = 'dsh-recent-sessions';
 
     const FILTER_KEY = 'dsh.sessions-window.filteredWorkspaces.v1';
     const PAGE_SIZE_KEY = 'dsh.sessions-window.pageSize.v1';

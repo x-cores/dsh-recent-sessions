@@ -33,7 +33,7 @@ jobs:
           (cd dist && zip -r "../${NAME}.zip" "${NAME}")
           (cd dist && tar -czf "../${NAME}.tar.gz" "${NAME}")
           sha256sum "${NAME}.zip" "${NAME}.tar.gz" "${TGZ}" > "checksums.txt"
-          cat local-sessions-window-0.1.0.tgz
+          cat dsh-recent-sessions-0.1.0.tgz
             checksums.txt
 
       - name: Create GitHub Release

@@ -4,7 +4,7 @@
 
 ```
 plugin/
-├── package.json        # 插件清单（@local/sessions-window）
+├── package.json        # 插件清单（dsh-recent-sessions）
 ├── index.js            # host 半（无逻辑，数据全在浏览器端）
 ├── client.js           # browser 半（全部 UI 与数据逻辑）
 ├── cordis.patch.yml    # bundle patch（注册面板）

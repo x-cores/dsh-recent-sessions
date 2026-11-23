@@ -1,7 +1,7 @@
-# @local/sessions-window bundle patch
+# dsh-recent-sessions bundle patch
 #
 # 「全部会话」主面板：注册 root `main` keyed slot 面板 + 左侧
 # sidebar.panellist 导航行，并在输入框 dock 上保留一个打开按钮。
 - insert:
     - id: sessions-window
-      name: '@local/sessions-window'
+      name: 'dsh-recent-sessions'

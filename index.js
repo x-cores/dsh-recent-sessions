@@ -1,5 +1,5 @@
 /**
- * @local/sessions-window —— host 半。
+ * dsh-recent-sessions —— host 半。
  *
  * 无 Host 侧逻辑：会话数据全部来自浏览器端官方快照
  * （ctx.get('sessions').list / ctx.get('workspaces').list），
