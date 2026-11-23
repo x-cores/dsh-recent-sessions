@@ -209,10 +209,9 @@ window.__ModuleLoader__.load({
       knownButton: { fontSize: 11, padding: '2px 6px', borderRadius: 999, border: BORDER, background: 'transparent', color: 'inherit', cursor: 'pointer' },
     };
 
-    /* 行背景完全由本类接管：基态透明（压掉 button 默认白底），hover 高亮。
-       行内联样式不得再写任何 background 键，否则会盖住这里的规则。 */
+    /* 行背景由本类接管：div 无 UA 默认底色，基态透明，hover 高亮 */
     const CSS = `
-.sw-row { outline: none; background-color: transparent; }
+.sw-row { outline: none; }
 .sw-row:not(.archived):hover, .sw-row:not(.archived):focus-visible {
   background-color: var(--dsw-alias-interactive-bg-hover, color-mix(in srgb, currentColor 8%, transparent)); }
 .sw-row.archived { cursor: default; opacity: .62; }
@@ -510,15 +509,20 @@ window.__ModuleLoader__.load({
 
     function SessionRow({ row, now, openSession, index }) {
       const isArchived = row.archived;
-      return h('button', {
-        type: 'button',
+      // 普通元素（非原生 button）：无 UA 默认白底/焦点样式，可点击性用 role+tabIndex+键盘事件补齐
+      return h('div', {
         className: `sw-row${isArchived ? ' archived' : ''}`,
         style: styles.row,
+        role: isArchived ? 'listitem' : 'button',
+        'aria-label': isArchived ? `${row.title}（已归档）` : `打开会话 ${row.title}`,
         tabIndex: isArchived ? -1 : 0,
         title: isArchived
           ? '已归档会话'
           : `${row.title}\n${row.cwd || row.id}\n${absoluteTime(row.updatedAt)}`,
         onClick: () => { if (!isArchived) openSession(row.id); },
+        onKeyDown: (e) => {
+          if (!isArchived && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openSession(row.id); }
+        },
       },
         h('span', { style: styles.indexNum, 'aria-hidden': true }, String(index)),
         h('span', { style: styles.rowMain },
