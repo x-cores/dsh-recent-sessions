@@ -416,7 +416,9 @@ window.__ModuleLoader__.load({
         const visibleRows = useMemo(() => {
           const filterSet = new Set(filtered);
           return allRows.filter((row) => {
-            if (filterSet.has(row.workspace)) return false;
+            // workspace 可能为空（sessionIds 未登记该会话，行上显示的是 cwd 目录名兜底），
+            // 过滤时同时匹配两者，保证按可见名字能过滤掉。
+            if (filterSet.has(row.workspace) || filterSet.has(cwdBasename(row.cwd))) return false;
             if (queryLower.length === 0) return true;
             return row.title.toLowerCase().includes(queryLower)
               || row.id.toLowerCase().includes(queryLower)
