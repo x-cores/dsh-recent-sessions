@@ -171,14 +171,14 @@ window.__ModuleLoader__.load({
       },
       rowArchived: { cursor: 'default', opacity: 0.62 },
       rowMain: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 },
-      /* 行首序号：大字体、跨两行（标题+元信息）、无边框装饰 */
+      /* 行首序号：大字体、跨两行、靠顶部对齐、无边框装饰 */
       indexNum: {
-        flexShrink: 0, minWidth: 34, display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-        fontSize: 20, fontWeight: 600, lineHeight: 1, color: MUTED,
-        fontVariantNumeric: 'tabular-nums',
+        flexShrink: 0, minWidth: 34, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end',
+        fontSize: 20, fontWeight: 600, lineHeight: 1.1, color: MUTED,
+        fontVariantNumeric: 'tabular-nums', alignSelf: 'flex-start',
       },
-      rowTitle: { display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500, minWidth: 0 },
-      rowTitleText: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 },
+      rowTitle: { display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500, minWidth: 0, flexWrap: 'wrap' },
+      rowTitleText: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
       badge: {
         flexShrink: 0, fontSize: 11, lineHeight: 1, padding: '3px 6px', borderRadius: 999,
         fontWeight: 400, border: BORDER,
@@ -214,14 +214,8 @@ window.__ModuleLoader__.load({
     const CSS = `
 .sw-row { outline: none; }
 .sw-row:not(.archived):hover, .sw-row:not(.archived):focus-visible {
-  background: color-mix(in srgb, currentColor 8%, transparent); }
+  background-color: var(--dsw-alias-interactive-bg-hover, color-mix(in srgb, currentColor 8%, transparent)); }
 .sw-row.archived { cursor: default; opacity: .62; }
-/* 翻页链接 */
-.sw-link { background: none; border: none; padding: 0; font: inherit; font-size: 12px;
-  color: color-mix(in srgb, #4c9aff 80%, currentColor 20%); cursor: pointer; text-decoration: none; }
-.sw-link:hover { text-decoration: underline; }
-.sw-link.off { color: color-mix(in srgb, currentColor 40%, transparent); cursor: default; }
-.sw-link.off:hover { text-decoration: none; }
 `;
 
     /* ───────────────────────── 装饰 SVG ───────────────────────── */
@@ -273,7 +267,9 @@ window.__ModuleLoader__.load({
       };
       const suggestions = knownWorkspaces.filter((w) => w && !filtered.includes(w)).slice(0, 12);
       return h('div', { style: styles.filterPanel },
-        h('div', { style: styles.hintText }, '隐藏这些工作区下的全部会话：'),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          h('span', { style: styles.hintText }, '隐藏这些工作区下的全部会话：'),
+          h('span', { style: { ...styles.hintText, marginLeft: 'auto', whiteSpace: 'nowrap' } }, '回车或点上方建议添加；× 移除。')),
         filtered.length > 0 && h('div', { style: styles.chips },
           filtered.map((name) => h('span', { key: name, style: styles.chip },
             name,
@@ -291,8 +287,7 @@ window.__ModuleLoader__.load({
         suggestions.length > 0 && h('div', { style: styles.knownRow },
           suggestions.map((name) => h('button', {
             key: name, style: styles.knownButton, onClick: () => add(name),
-          }, `+ ${name}`))),
-        h('div', { style: styles.hintText }, '回车或点上方建议添加；× 移除。'));
+          }, `+ ${name}`))));
     }
 
     /* ───────────────────────── 主面板 ───────────────────────── */
@@ -503,11 +498,11 @@ window.__ModuleLoader__.load({
       };
     }
 
-    /** 翻页链接（不用按钮） */
+    /** 翻页按钮 */
     function pageLink(label, target, disabled, safePage, totalPages, setPage) {
       return h('button', {
         type: 'button',
-        className: `sw-link${disabled ? ' off' : ''}`,
+        style: { ...styles.button, ...(disabled ? { opacity: 0.45, cursor: 'default' } : {}) },
         disabled,
         onClick: () => { if (!disabled && target >= 1 && target <= totalPages) setPage(target); },
       }, label);
