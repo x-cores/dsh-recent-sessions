@@ -510,10 +510,16 @@ window.__ModuleLoader__.load({
 
     function SessionRow({ row, now, openSession, index }) {
       const isArchived = row.archived;
+      // hover 高亮直接写元素 style（内联 background:'transparent' 会盖掉 CSS 类的 :hover）
+      const hoverBind = isArchived ? {} : {
+        onMouseEnter: (e) => { e.currentTarget.style.backgroundColor = 'var(--dsw-alias-interactive-bg-hover)'; },
+        onMouseLeave: (e) => { e.currentTarget.style.backgroundColor = ''; },
+      };
       return h('button', {
         type: 'button',
         className: `sw-row${isArchived ? ' archived' : ''}`,
         style: styles.row,
+        ...hoverBind,
         tabIndex: isArchived ? -1 : 0,
         title: isArchived
           ? '已归档会话'
