@@ -161,7 +161,7 @@ window.__ModuleLoader__.load({
         padding: '5px 6px', font: 'inherit', cursor: 'pointer', outline: 'none',
         border: BORDER, borderRadius: 6,
       },
-      list: { flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4, paddingRight: 2 },
+      list: { flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: 4, paddingRight: 2 },
       row: {
         display: 'flex', alignItems: 'stretch', gap: 10,
         padding: '6px 8px', borderRadius: 8,
@@ -176,8 +176,8 @@ window.__ModuleLoader__.load({
         fontSize: 20, fontWeight: 600, lineHeight: 1.1, color: MUTED,
         fontVariantNumeric: 'tabular-nums', alignSelf: 'flex-start',
       },
-      rowTitle: { display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500, minWidth: 0, flexWrap: 'wrap' },
-      rowTitleText: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+      rowTitle: { display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500, minWidth: 0, maxWidth: '100%', overflow: 'hidden', flexWrap: 'wrap' },
+      rowTitleText: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '0 1 auto', minWidth: 0, maxWidth: '100%' },
       badge: {
         flexShrink: 0, fontSize: 11, lineHeight: 1, padding: '3px 6px', borderRadius: 999,
         fontWeight: 400, border: BORDER,
