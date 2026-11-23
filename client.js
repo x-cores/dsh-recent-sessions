@@ -566,9 +566,7 @@ window.__ModuleLoader__.load({
             h('span', {
               style: styles.rowMetaLeft,
               title: `${row.cwd}${row.cwd ? '\n' : ''}${row.id}`,
-            }, [row.workspace, cwdBasename(row.cwd)]
-              .filter((part, i, arr) => part && arr.indexOf(part) === i)
-              .join(' · ')),
+            }, row.workspace || ''),
             h('span', { style: styles.rowMetaRight, title: at },
               relativeTime(row.updatedAt, now),
               h('span', { style: { opacity: 0.5 } }, '·'),
