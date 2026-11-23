@@ -1,0 +1,7 @@
+url: https://github.com/x-cores/dsh-recent-sessions/tree/main
+name: x-cores/dsh-recent-sessions
+category: productivity
+description:
+  en: "All sessions" main panel — sidebar entry plus a main-area panel listing every session (newest first) with search, paging, archive badges and workspace filtering.
+  zh: 「全部会话」主面板——左侧导航入口 + 主对话区面板，列出所有会话（按更新时间倒序），支持搜索、分页、归档标识与工作区过滤。
+tarball: https://github.com/x-cores/dsh-recent-sessions/releases/download/v0.1.0/local-sessions-window-0.1.0.tgz

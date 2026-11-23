@@ -26,12 +26,15 @@ jobs:
       - name: Pack release artifact
         run: |
           NAME="${GITHUB_REPOSITORY#*/}-${GITHUB_REF_NAME}"
+          npm pack --pack-destination .
+          TGZ="$(ls ./*.tgz)"
           mkdir -p "dist/${NAME}"
           cp -r index.js client.js cordis.patch.yml docs icon.svg LICENSE README.md package.json "dist/${NAME}/"
           (cd dist && zip -r "../${NAME}.zip" "${NAME}")
           (cd dist && tar -czf "../${NAME}.tar.gz" "${NAME}")
-          sha256sum "${NAME}.zip" "${NAME}.tar.gz" > "checksums.txt"
-          cat checksums.txt
+          sha256sum "${NAME}.zip" "${NAME}.tar.gz" "${TGZ}" > "checksums.txt"
+          cat local-sessions-window-0.1.0.tgz
+            checksums.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -40,4 +43,5 @@ jobs:
           files: |
             *.zip
             *.tar.gz
+            local-sessions-window-0.1.0.tgz
             checksums.txt
