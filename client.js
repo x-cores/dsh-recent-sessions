@@ -165,9 +165,8 @@ window.__ModuleLoader__.load({
       row: {
         display: 'flex', alignItems: 'stretch', gap: 10,
         padding: '6px 8px', borderRadius: 8,
-        cursor: 'pointer', textAlign: 'left', outline: 'none',
-        width: '100%', font: 'inherit', color: 'inherit',
-        background: 'transparent', border: 'none',
+        cursor: 'pointer', textAlign: 'left',
+        width: '100%', font: 'inherit', color: 'inherit', border: 'none',
       },
       rowArchived: { cursor: 'default', opacity: 0.62 },
       rowMain: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 },
@@ -210,9 +209,10 @@ window.__ModuleLoader__.load({
       knownButton: { fontSize: 11, padding: '2px 6px', borderRadius: 999, border: BORDER, background: 'transparent', color: 'inherit', cursor: 'pointer' },
     };
 
-    /* 行 hover 走 CSS :hover（移出高亮立即消失，不依赖 JS state，不会残留） */
+    /* 行背景完全由本类接管：基态透明（压掉 button 默认白底），hover 高亮。
+       行内联样式不得再写任何 background 键，否则会盖住这里的规则。 */
     const CSS = `
-.sw-row { outline: none; }
+.sw-row { outline: none; background-color: transparent; }
 .sw-row:not(.archived):hover, .sw-row:not(.archived):focus-visible {
   background-color: var(--dsw-alias-interactive-bg-hover, color-mix(in srgb, currentColor 8%, transparent)); }
 .sw-row.archived { cursor: default; opacity: .62; }
@@ -510,16 +510,10 @@ window.__ModuleLoader__.load({
 
     function SessionRow({ row, now, openSession, index }) {
       const isArchived = row.archived;
-      // hover 高亮直接写元素 style（内联 background:'transparent' 会盖掉 CSS 类的 :hover）
-      const hoverBind = isArchived ? {} : {
-        onMouseEnter: (e) => { e.currentTarget.style.backgroundColor = 'var(--dsw-alias-interactive-bg-hover)'; },
-        onMouseLeave: (e) => { e.currentTarget.style.backgroundColor = ''; },
-      };
       return h('button', {
         type: 'button',
         className: `sw-row${isArchived ? ' archived' : ''}`,
         style: styles.row,
-        ...hoverBind,
         tabIndex: isArchived ? -1 : 0,
         title: isArchived
           ? '已归档会话'
